@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+/* Prism syntax highlighting theme (One Dark) */
+code[class*="language-"],
+pre[class*="language-"] {
+  color: #abb2bf;
+  background: none;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, Monaco, monospace;
+  font-size: 0.85em;
+  text-align: left;
+  white-space: pre;
+  word-spacing: normal;
+  word-break: normal;
+  line-height: 1.6;
+  tab-size: 4;
+  hyphens: none;
+}
+
+.token.comment { color: #5c6370; font-style: italic; }
+.token.keyword { color: #c678dd; }
+.token.string { color: #98c379; }
+.token.number { color: #d19a66; }
+.token.operator { color: #56b6c2; }
+.token.punctuation { color: #abb2bf; }
+.token.function { color: #61afef; }
+.token.class-name { color: #e5c07b; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #1a1d23; }
+::-webkit-scrollbar-thumb { background: #3a3f4b; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4a5060; }
