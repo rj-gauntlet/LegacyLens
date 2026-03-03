@@ -29,6 +29,51 @@ const FEATURE_PROMPTS: Record<FeatureMode, string> = {
     "Analyze this COBOL code for potential bugs or anti-patterns. Look for: uninitialized variables, missing error handling after file I/O, arithmetic overflow risks, and dead code.",
   impact:
     "Analyze what would be impacted if this code were changed or removed. What other paragraphs PERFORM it? What data items does it modify that might be used elsewhere?",
+  test_gen:
+    `Generate Python unit tests (using pytest) that would verify the equivalent behavior of the provided COBOL code. For each test:
+1. Name the test function descriptively based on the business logic being tested.
+2. Include a brief docstring explaining what COBOL behavior is being validated.
+3. Define the expected inputs and outputs based on the COBOL logic.
+4. Use assertions that map to the COBOL conditions (IF, EVALUATE) and computations (COMPUTE, ADD, MULTIPLY).
+5. Include edge case tests where appropriate (zero values, boundary conditions, empty strings).
+If the COBOL code involves file I/O, mock the file operations and test the record processing logic.
+Output ONLY valid Python code with pytest imports. Add comments referencing the original COBOL paragraph names and line numbers.`,
+  modernize:
+    `You are a senior solutions architect. Analyze the provided COBOL program and produce a structured modernization plan with the following sections:
+
+## 1. Program Summary
+One paragraph describing what this program does in business terms.
+
+## 2. Architecture Recommendation
+Suggest the modern architecture (e.g., REST API, serverless function, microservice, scheduled job) and justify why.
+
+## 3. Technology Stack
+Recommend specific modern technologies (language, framework, database, cloud services) for the rewrite.
+
+## 4. Module Breakdown
+List each COBOL section/paragraph as a discrete module to migrate. For each:
+- Current COBOL paragraph/section name
+- Proposed modern function/class name
+- Complexity estimate (Low / Medium / High)
+- Dependencies on other modules
+
+## 5. Migration Order
+Recommend the order to migrate modules (dependency-first), with rationale.
+
+## 6. Risk Assessment
+Identify the top 3-5 risks in migrating this specific program (data format changes, business logic ambiguity, untested edge cases).
+
+## 7. Effort Estimate
+Provide a rough effort estimate in developer-days for the full migration.
+
+Be specific to the actual code provided — do not give generic advice.`,
+  cross_ref:
+    `Trace the given identifier (variable, paragraph name, file, or concept) across ALL files present in the retrieved context. For each file where it appears:
+1. State the file name and line numbers.
+2. Explain HOW the identifier is used in that file (defined, read, written, called, etc.).
+3. Identify the data flow: where does data come FROM and where does it GO TO?
+
+Organize your response by file. At the end, provide a summary of the cross-file relationships and any potential risks if this identifier were changed.`,
 };
 
 let openaiClient: OpenAI | null = null;

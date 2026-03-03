@@ -22,11 +22,9 @@ function getClients() {
 }
 
 function extractFileHint(query: string): string | null {
-  // Match explicit file references like "dasize.cob", "cobxref.cbl"
   const fileMatch = query.match(/[\w\-]+\.(cob|cbl|cpy)/i);
   if (fileMatch) return fileMatch[0].toLowerCase();
-  // Match known bare program/tool names
-  const knownTools = ["cobxref", "dasize", "accept-keys", "cobolmac", "htm2cob", "printcbl", "cgiform", "wumpus"];
+  const knownTools = ["cobxref", "dasize", "accept-keys", "cobolmac", "htm2cob", "printcbl", "cgiform", "wumpus", "gcsort"];
   for (const tool of knownTools) {
     if (query.toLowerCase().includes(tool)) return tool;
   }
@@ -47,6 +45,34 @@ function toChunk(match: any): RetrievedChunk {
   };
 }
 
+// --- Hybrid Search: keyword scoring ---
+
+const STOPWORDS = new Set([
+  "the","a","an","in","on","at","to","for","of","is","are","was","were","be",
+  "been","being","have","has","had","do","does","did","will","would","could",
+  "should","may","might","shall","can","this","that","these","those","i","me",
+  "my","we","our","you","your","it","its","what","which","who","how","where",
+  "when","why","all","each","every","both","and","or","not","no","so","if",
+  "then","else","than","too","very","just","show","find","get","tell",
+]);
+
+function computeKeywordScore(queryTerms: string[], chunk: RetrievedChunk): number {
+  if (queryTerms.length === 0) return 0;
+  const haystack = `${chunk.text} ${chunk.source} ${chunk.paragraph} ${chunk.section}`.toLowerCase();
+  let hits = 0;
+  for (const term of queryTerms) {
+    if (haystack.includes(term)) hits++;
+  }
+  return hits / queryTerms.length;
+}
+
+function extractQueryTerms(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 2 && !STOPWORDS.has(t));
+}
+
 export async function retrieveChunks(
   query: string,
   topK: number = 10
@@ -55,9 +81,10 @@ export async function retrieveChunks(
 
   const [queryVector] = await embeddings.embedDocuments([query]);
   const fileHint = extractFileHint(query);
+  const queryTerms = extractQueryTerms(query);
 
-  // Fetch a larger pool when a file is mentioned so we can re-rank
-  const fetchK = fileHint ? Math.max(topK * 3, 30) : topK;
+  // Always fetch a larger pool for hybrid re-ranking
+  const fetchK = Math.max(topK * 3, 30);
 
   const results = await index.query({
     vector: queryVector,
@@ -67,19 +94,68 @@ export async function retrieveChunks(
 
   if (!results.matches) return [];
 
-  const allChunks = results.matches.map(toChunk);
+  // Apply hybrid scoring: vector similarity + keyword boost
+  const allChunks = results.matches.map(toChunk).map((chunk) => ({
+    ...chunk,
+    score: chunk.score + 0.15 * computeKeywordScore(queryTerms, chunk),
+  }));
 
-  // If a specific file was mentioned, bubble those chunks to the top
+  allChunks.sort((a, b) => b.score - a.score);
+
   if (fileHint) {
     const fromFile = allChunks.filter((c) =>
       c.source.toLowerCase().includes(fileHint)
     );
-    const others = allChunks.filter((c) =>
-      !c.source.toLowerCase().includes(fileHint)
+    const others = allChunks.filter(
+      (c) => !c.source.toLowerCase().includes(fileHint)
     );
-    // Return file-specific chunks first, then fill remaining slots with global results
     return [...fromFile, ...others].slice(0, topK);
   }
 
   return allChunks.slice(0, topK);
+}
+
+// --- Multi-file cross-reference retrieval ---
+
+export async function retrieveCrossFileChunks(
+  query: string,
+  topK: number = 15
+): Promise<RetrievedChunk[]> {
+  const { index, embeddings } = getClients();
+
+  const [queryVector] = await embeddings.embedDocuments([query]);
+  const queryTerms = extractQueryTerms(query);
+
+  const results = await index.query({
+    vector: queryVector,
+    topK: Math.max(topK * 5, 50),
+    includeMetadata: true,
+  });
+
+  if (!results.matches) return [];
+
+  const allChunks = results.matches.map(toChunk).map((chunk) => ({
+    ...chunk,
+    score: chunk.score + 0.15 * computeKeywordScore(queryTerms, chunk),
+  }));
+
+  allChunks.sort((a, b) => b.score - a.score);
+
+  // Ensure cross-file diversity: pick top chunk from each unique file first
+  const seenFiles = new Set<string>();
+  const diverse: RetrievedChunk[] = [];
+  const remainder: RetrievedChunk[] = [];
+
+  for (const chunk of allChunks) {
+    const fileKey = chunk.source.toLowerCase();
+    if (!seenFiles.has(fileKey)) {
+      seenFiles.add(fileKey);
+      diverse.push(chunk);
+    } else {
+      remainder.push(chunk);
+    }
+  }
+
+  // Fill: diverse first (one per file), then remaining by score
+  return [...diverse, ...remainder].slice(0, topK);
 }

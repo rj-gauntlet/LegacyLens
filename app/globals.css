@@ -1,32 +1,258 @@
 @import "tailwindcss";
 
-/* Prism syntax highlighting theme (One Dark) */
-code[class*="language-"],
-pre[class*="language-"] {
-  color: #abb2bf;
-  background: none;
-  font-family: "JetBrains Mono", "Fira Code", Consolas, Monaco, monospace;
-  font-size: 0.85em;
-  text-align: left;
-  white-space: pre;
-  word-spacing: normal;
-  word-break: normal;
-  line-height: 1.6;
-  tab-size: 4;
-  hyphens: none;
+/* ── Terminal Color Palette (CSS custom properties) ── */
+:root {
+  --bg-deep: #080c08;
+  --bg-surface: #0d120d;
+  --bg-panel: #111a11;
+  --bg-elevated: #162016;
+  --border-green: #1a2e1a;
+  --border-green-bright: #2d4a2d;
+  --accent-green: #00ff41;
+  --accent-neon: #39ff14;
+  --text-green: #b5e853;
+  --text-green-dim: #5a7a2a;
+  --text-body: #c9d1d9;
+  --text-muted: #6b7b6b;
+  --amber: #ffb000;
+  --amber-dim: #7a5500;
 }
 
-.token.comment { color: #5c6370; font-style: italic; }
-.token.keyword { color: #c678dd; }
-.token.string { color: #98c379; }
-.token.number { color: #d19a66; }
-.token.operator { color: #56b6c2; }
-.token.punctuation { color: #abb2bf; }
-.token.function { color: #61afef; }
-.token.class-name { color: #e5c07b; }
+/* ── Base ── */
+body {
+  background: var(--bg-deep);
+  color: var(--text-body);
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+}
 
-/* Custom scrollbar */
+/* ── Scanline Overlay ── */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+}
+
+/* ── Vignette ── */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+/* ── CRT Glow Utility ── */
+.crt-glow {
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.4), 0 0 2px rgba(0, 255, 65, 0.2);
+}
+
+.crt-glow-amber {
+  text-shadow: 0 0 8px rgba(255, 176, 0, 0.4), 0 0 2px rgba(255, 176, 0, 0.2);
+}
+
+/* ── Blinking Terminal Cursor ── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.terminal-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  background: var(--accent-green);
+  animation: blink 1s step-end infinite;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+}
+
+/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #1a1d23; }
-::-webkit-scrollbar-thumb { background: #3a3f4b; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #4a5060; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--border-green-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-green-dim); }
+
+/* ── Markdown Rendering (terminal-styled) ── */
+.terminal-markdown h1,
+.terminal-markdown h2,
+.terminal-markdown h3 {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--accent-green);
+  text-shadow: 0 0 8px rgba(0, 255, 65, 0.3);
+  border-bottom: 1px solid var(--border-green);
+  padding-bottom: 0.4em;
+  margin-top: 1.2em;
+  margin-bottom: 0.6em;
+}
+.terminal-markdown h1 { font-size: 1.1em; text-transform: uppercase; }
+.terminal-markdown h2 { font-size: 1em; text-transform: uppercase; }
+.terminal-markdown h3 { font-size: 0.9em; border-bottom: none; text-transform: uppercase; }
+
+.terminal-markdown p {
+  color: var(--text-body);
+  line-height: 1.7;
+  margin-bottom: 0.8em;
+}
+
+.terminal-markdown strong {
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.terminal-markdown em {
+  color: var(--text-green);
+  font-style: italic;
+}
+
+.terminal-markdown ul,
+.terminal-markdown ol {
+  padding-left: 0;
+  list-style: none;
+  margin-bottom: 0.8em;
+}
+
+.terminal-markdown li {
+  position: relative;
+  padding-left: 1.5em;
+  margin-bottom: 0.3em;
+  color: var(--text-body);
+}
+
+.terminal-markdown li::before {
+  content: ">";
+  position: absolute;
+  left: 0;
+  color: var(--text-green-dim);
+  font-weight: bold;
+}
+
+.terminal-markdown ol { counter-reset: terminal-counter; }
+.terminal-markdown ol li { counter-increment: terminal-counter; }
+.terminal-markdown ol li::before {
+  content: counter(terminal-counter) ".";
+  color: var(--text-green-dim);
+}
+
+.terminal-markdown code:not(pre code) {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-green);
+  color: var(--amber);
+  padding: 0.15em 0.4em;
+  border-radius: 2px;
+  font-size: 0.9em;
+}
+
+.terminal-markdown pre {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-green);
+  border-left: 3px solid var(--accent-green);
+  border-radius: 2px;
+  padding: 1em;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}
+
+.terminal-markdown pre code {
+  color: var(--amber);
+  font-size: 0.85em;
+  line-height: 1.6;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.terminal-markdown a {
+  color: var(--accent-green);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.terminal-markdown blockquote {
+  border-left: 3px solid var(--border-green-bright);
+  padding-left: 1em;
+  color: var(--text-muted);
+  margin-bottom: 0.8em;
+}
+
+.terminal-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1em;
+  font-size: 0.85em;
+}
+
+.terminal-markdown th {
+  text-align: left;
+  border-bottom: 1px solid var(--accent-green);
+  padding: 0.4em 0.8em;
+  color: var(--accent-green);
+}
+
+.terminal-markdown td {
+  border-bottom: 1px solid var(--border-green);
+  padding: 0.4em 0.8em;
+  color: var(--text-body);
+}
+
+/* ── PrismJS Token Colors (terminal palette) ── */
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata { color: var(--text-green-dim); font-style: italic; }
+
+.token.punctuation { color: var(--text-muted); }
+
+.token.property,
+.token.tag,
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol { color: var(--amber); }
+
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin { color: var(--text-green); }
+
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string { color: var(--accent-neon); }
+
+.token.atrule,
+.token.attr-value,
+.token.keyword { color: var(--accent-green); font-weight: bold; }
+
+.token.function,
+.token.class-name { color: var(--amber); font-weight: bold; }
+
+.token.regex,
+.token.important,
+.token.variable { color: var(--accent-neon); }
+
+.token.important,
+.token.bold { font-weight: bold; }
+
+.token.italic { font-style: italic; }
+
+/* ── Sidebar transition ── */
+.sidebar-transition {
+  transition: width 0.2s ease;
+}
+
+/* ── Focus ring override ── */
+input:focus, button:focus-visible {
+  outline: 1px solid var(--accent-green);
+  outline-offset: -1px;
+}

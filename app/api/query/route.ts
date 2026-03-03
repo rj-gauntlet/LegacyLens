@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { retrieveChunks } from "../../../src/retriever";
+import { retrieveChunks, retrieveCrossFileChunks } from "../../../src/retriever";
 import { generateAnswerStream } from "../../../src/generate";
 import { FeatureMode } from "../../../src/types";
 
@@ -16,6 +16,9 @@ function buildSearchQuery(query: string, mode: FeatureMode): string {
     bug_pattern: [/scan\s+(for\s+)?(potential\s+)?(bugs?\s+)?(and\s+)?/gi, /find\s+(potential\s+)?bugs?\s+in\s+/gi],
     document: [/document\s+(the\s+)?/gi, /generate\s+documentation\s+for\s+/gi],
     explain: [/explain\s+(what\s+)?(the\s+)?/gi, /what\s+does\s+/gi, /\s+do(es)?\??$/gi],
+    test_gen: [/generate\s+(unit\s+)?tests?\s+(for\s+)?/gi, /write\s+(pytest\s+)?tests?\s+(for\s+)?/gi, /test\s+(the\s+)?/gi],
+    modernize: [/modernize\s+(the\s+)?/gi, /create\s+(a\s+)?migration\s+plan\s+(for\s+)?/gi, /modernization\s+plan\s+(for\s+)?/gi],
+    cross_ref: [/trace\s+(the\s+)?/gi, /cross[- ]?reference\s+(for\s+)?/gi, /track\s+(the\s+)?usage\s+of\s+/gi, /\s+across\s+(all\s+)?(programs?|files?|modules?|the\s+codebase)/gi, /\s+in\s+(all\s+)?(programs?|files?)/gi],
   };
 
   let searchQuery = query;
@@ -37,7 +40,10 @@ export async function POST(req: NextRequest) {
   }
 
   const searchQuery = buildSearchQuery(query, mode as FeatureMode);
-  const chunks = await retrieveChunks(searchQuery, 10);
+  const chunks =
+    mode === "cross_ref"
+      ? await retrieveCrossFileChunks(searchQuery, 15)
+      : await retrieveChunks(searchQuery, 10);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({

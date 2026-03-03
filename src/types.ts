@@ -18,4 +18,25 @@ export type FeatureMode =
   | "business_logic"
   | "dependency"
   | "bug_pattern"
-  | "impact";
+  | "impact"
+  | "test_gen"
+  | "modernize"
+  | "cross_ref";
+
+export interface CallGraphNode {
+  id: string;
+  label: string;
+  type: "paragraph" | "section" | "external" | "copybook";
+}
+
+export interface CallGraphEdge {
+  from: string;
+  to: string;
+  type: "perform" | "call" | "copy" | "goto";
+}
+
+export interface CallGraphData {
+  nodes: CallGraphNode[];
+  edges: CallGraphEdge[];
+  programName: string;
+}
