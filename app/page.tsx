@@ -66,8 +66,10 @@ interface Message {
 
 interface TooltipInfo {
   label: string;
+  description?: string;
   top: number;
   left: number;
+  positionAbove?: boolean;
 }
 
 // ── Sidebar Button ──
@@ -75,6 +77,8 @@ interface TooltipInfo {
 function SidebarButton({
   icon,
   label,
+  description,
+  tooltipAbove,
   active,
   expanded,
   onClick,
@@ -82,6 +86,8 @@ function SidebarButton({
 }: {
   icon: string;
   label: string;
+  description?: string;
+  tooltipAbove?: boolean;
   active: boolean;
   expanded: boolean;
   onClick: () => void;
@@ -94,9 +100,19 @@ function SidebarButton({
       ref={btnRef}
       onClick={onClick}
       onMouseEnter={() => {
-        if (expanded || !btnRef.current) return;
+        if (!btnRef.current) return;
         const rect = btnRef.current.getBoundingClientRect();
-        onTooltip({ label, top: rect.top + rect.height / 2 - 12, left: rect.right + 8 });
+        if (expanded && description) {
+          onTooltip({
+            label,
+            description,
+            top: tooltipAbove ? rect.top : rect.bottom + 6,
+            left: rect.left,
+            positionAbove: tooltipAbove,
+          });
+        } else if (!expanded) {
+          onTooltip({ label, top: rect.top + rect.height / 2 - 12, left: rect.right + 8 });
+        }
       }}
       onMouseLeave={() => onTooltip(null)}
       className="flex items-center transition-all"
@@ -189,6 +205,7 @@ function Sidebar({
               key={m.value}
               icon={m.icon}
               label={m.label}
+              description={m.description}
               active={view === "chat" && mode === m.value}
               expanded={expanded}
               onClick={() => { setMode(m.value); setView("chat"); }}
@@ -214,6 +231,8 @@ function Sidebar({
         <SidebarButton
           icon=">_"
           label="Chat"
+          description="Switch to chat and ask questions"
+          tooltipAbove
           active={view === "chat"}
           expanded={expanded}
           onClick={() => setView("chat")}
@@ -222,6 +241,8 @@ function Sidebar({
         <SidebarButton
           icon="#"
           label="Call Graph"
+          description="Visualize PERFORM, CALL, COPY relationships"
+          tooltipAbove
           active={view === "callgraph"}
           expanded={expanded}
           onClick={() => setView("callgraph")}
@@ -1028,18 +1049,20 @@ export default function Home() {
             position: "fixed",
             top: sidebarTooltip.top,
             left: sidebarTooltip.left,
+            transform: sidebarTooltip.positionAbove ? "translateY(calc(-100% - 6px))" : undefined,
             zIndex: 99999,
             background: "var(--bg-elevated)",
             border: "1px solid var(--border-green-bright)",
             color: "var(--text-green)",
             fontSize: 11,
-            padding: "4px 10px",
+            padding: "6px 10px",
             borderRadius: 2,
-            whiteSpace: "nowrap",
+            maxWidth: 260,
+            whiteSpace: sidebarTooltip.description ? "normal" : "nowrap",
             pointerEvents: "none",
           }}
         >
-          {sidebarTooltip.label}
+          {sidebarTooltip.description ?? sidebarTooltip.label}
         </div>
       )}
     </div>
