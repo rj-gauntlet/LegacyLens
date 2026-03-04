@@ -33,48 +33,82 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
-  const { query, mode = "answer" } = await req.json();
+  let query: string;
+  let mode: string;
+  try {
+    const body = await req.json();
+    query = body?.query;
+    mode = body?.mode ?? "answer";
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400 });
+  }
 
   if (!query || typeof query !== "string") {
     return new Response(JSON.stringify({ error: "Missing query" }), { status: 400 });
   }
 
-  const searchQuery = buildSearchQuery(query, mode as FeatureMode);
-  const chunks =
-    mode === "cross_ref"
-      ? await retrieveCrossFileChunks(searchQuery, 15)
-      : await retrieveChunks(searchQuery, 10);
+  // Input validation: max length, strip control chars
+  const MAX_QUERY_LENGTH = 2000;
+  let sanitized = query.trim().slice(0, MAX_QUERY_LENGTH).replace(/[\x00-\x1f\x7f]/g, "");
+  if (!sanitized) {
+    return new Response(JSON.stringify({ error: "Query is empty after sanitization" }), { status: 400 });
+  }
+  query = sanitized;
 
   const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      // First, stream the chunks metadata as a JSON event
-      const chunksPayload = JSON.stringify({ type: "chunks", chunks });
-      controller.enqueue(encoder.encode(`data: ${chunksPayload}\n\n`));
 
-      // Then stream the LLM answer
-      await generateAnswerStream(
-        query,
-        chunks,
-        mode as FeatureMode,
-        (text) => {
-          const payload = JSON.stringify({ type: "token", text });
-          controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
-        },
-        () => {
-          const payload = JSON.stringify({ type: "done" });
-          controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+  try {
+    const searchQuery = buildSearchQuery(query, mode as FeatureMode);
+    const chunks =
+      mode === "cross_ref"
+        ? await retrieveCrossFileChunks(searchQuery, 15)
+        : await retrieveChunks(searchQuery, 10);
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        // First, stream the chunks metadata as a JSON event
+        const chunksPayload = JSON.stringify({ type: "chunks", chunks });
+        controller.enqueue(encoder.encode(`data: ${chunksPayload}\n\n`));
+
+        try {
+          // Then stream the LLM answer
+          await generateAnswerStream(
+            query,
+            chunks,
+            mode as FeatureMode,
+            (text) => {
+              const payload = JSON.stringify({ type: "token", text });
+              controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+            },
+            () => {
+              const payload = JSON.stringify({ type: "done" });
+              controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+              controller.close();
+            }
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "LLM request failed.";
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", message: msg })}\n\n`));
           controller.close();
         }
-      );
-    },
-  });
+      },
+    });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Query failed.";
+    // Log server-side so you can see the real error in deployment logs (e.g. Cursor Labs / Vercel)
+    console.error("[POST /api/query]", err);
+    const body = JSON.stringify({ error: String(message).slice(0, 500) });
+    return new Response(body, {
+      status: 500,
+      headers: { "Content-Type": "application/json; charset=utf-8", "X-Query-Error": "1" },
+    });
+  }
 }

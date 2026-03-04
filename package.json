@@ -7,7 +7,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "ingest": "ts-node src/ingest.ts"
+    "ingest": "ts-node src/ingest.ts",
+    "eval": "npx tsx src/evaluate.ts",
+    "eval:e2e": "npx tsx src/evaluate.ts --e2e",
+    "eval:all": "npx tsx src/evaluate.ts --all"
   },
   "keywords": [],
   "author": "",
@@ -31,6 +34,7 @@
     "react-markdown": "^10.1.0",
     "tailwindcss": "^4.2.1",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }

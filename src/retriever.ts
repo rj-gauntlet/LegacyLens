@@ -8,11 +8,23 @@ let pineconeIndex: ReturnType<InstanceType<typeof Pinecone>["index"]> | null = n
 let embeddingsModel: OpenAIEmbeddings | null = null;
 
 function getClients() {
+  const apiKey = process.env.PINECONE_API_KEY;
+  const indexName = process.env.PINECONE_INDEX;
+  if (!apiKey || !indexName) {
+    throw new Error(
+      "Missing Pinecone config in this environment. Set PINECONE_API_KEY and PINECONE_INDEX (e.g. in Vercel Project Settings → Environment Variables)."
+    );
+  }
   if (!pineconeIndex) {
-    const pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY! });
-    pineconeIndex = pinecone.index(process.env.PINECONE_INDEX!);
+    const pinecone = new Pinecone({ apiKey });
+    pineconeIndex = pinecone.index(indexName);
   }
   if (!embeddingsModel) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error(
+        "Missing OPENAI_API_KEY in this environment. Set it in your deployment's environment variables for embeddings and LLM."
+      );
+    }
     embeddingsModel = new OpenAIEmbeddings({
       modelName: "text-embedding-3-small",
       dimensions: 1536,

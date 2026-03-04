@@ -834,6 +834,12 @@ export default function Home() {
         body: JSON.stringify({ query: input.trim(), mode }),
       });
 
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        const message = (errBody as { error?: string }).error ?? `Request failed (${response.status})`;
+        throw new Error(message);
+      }
+
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -865,6 +871,14 @@ export default function Home() {
                     : m
                 )
               );
+            } else if (event.type === "error") {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantId
+                    ? { ...m, content: `Error: ${event.message ?? "Request failed."}`, isStreaming: false }
+                    : m
+                )
+              );
             } else if (event.type === "done") {
               setMessages((prev) =>
                 prev.map((m) =>
@@ -875,11 +889,12 @@ export default function Home() {
           } catch {}
         }
       }
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to get response.";
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantId
-            ? { ...m, content: "Error: Failed to get response.", isStreaming: false }
+            ? { ...m, content: `Error: ${message}`, isStreaming: false }
             : m
         )
       );

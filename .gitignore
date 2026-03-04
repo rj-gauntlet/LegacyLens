@@ -16,6 +16,10 @@ dist/
 # The codebase is large - exclude from git, it's already in Pinecone
 codebase/
 
+# Eval artifacts (optional: remove to track results in git)
+evals/results/
+evals/history.jsonl
+
 # Logs
 *.log
 npm-debug.log*

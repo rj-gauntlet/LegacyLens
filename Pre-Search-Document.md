@@ -86,8 +86,10 @@ This document captures the constraint-driven architectural decisions made prior 
 *   **Small Chunk Retrieval Gap (Discovered During Testing):** Very small COBOL paragraphs (1-3 lines, e.g., a MAIN paragraph that only contains a single PERFORM call) produce low-quality embeddings with insufficient semantic signal. When a user asks specifically about such a paragraph, the system retrieves surrounding structural chunks (e.g., IDENTIFICATION DIVISION) instead of the target paragraph. *Mitigation implemented:* A file-hint re-ranking system was added that fetches 3x the usual number of results and prioritizes chunks from the explicitly mentioned file. *Future fix:* Implement a hierarchical chunking strategy that always includes the parent section's context alongside small paragraph chunks, ensuring minimum token density per chunk.
 
 **13. Evaluation Strategy**
-*   **Measurement:** Automated Ground Truth Testing. A script evaluating Top-5 retrieval precision against a predefined set of questions and expected line numbers.
-    *   *Alternatives Considered:* Manual "Eyeball" Testing - rejected because the rubric specifically demands objective precision metrics.
+*   **Automated Evals:** Ground truth testing via `src/evaluate.ts`. Metrics: Top-5 retrieval precision, MRR, latency (retrieval and E2E), answer relevance (does LLM cite expected file?). See [evals/README.md](evals/README.md) and [TESTING.md](TESTING.md).
+*   **Manual Smoke Tests:** Per-mode QA checklist before demo or release (see TESTING.md).
+*   **Optional Unit Tests (Future):** Chunker, query preprocessing (`buildSearchQuery`), file-hint extraction—deferred for MVP.
+    *   *Alternatives Considered:* Manual-only testing - rejected because the rubric demands objective precision metrics.
 
 **14. Performance Optimization**
 *   **(Deferred)**: The system relies on managed scaling (Pinecone) and fast models (`gpt-4o-mini`). Further optimization like semantic caching is out of scope for the MVP.
@@ -97,3 +99,11 @@ This document captures the constraint-driven architectural decisions made prior 
 
 **16. Deployment & DevOps**
 *   Targeting Vercel for the Next.js web application frontend/backend.
+
+**17. Security**
+*   **API Key Management:** Keys stored in `.env` (gitignored). Production: Vercel Environment Variables. Never logged or exposed to the client.
+*   **Input Validation:** Query string validated for max length (2000 chars) and stripped of control characters before embedding/LLM use to limit abuse and injection surface.
+*   **Prompt Injection:** User query is injected into the LLM prompt. Mitigation: system prompt instructs the model to refuse answering when context is insufficient and to cite only provided code. No user-controlled system instructions.
+
+**18. Project Structure & Setup**
+*   See [README.md](README.md) for full setup, folder structure, and scripts. Summary: `app/` (Next.js), `src/` (retriever, chunker, generate, ingest, evaluate), `evals/` (results and history).
