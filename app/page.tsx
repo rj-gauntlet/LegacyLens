@@ -52,6 +52,9 @@ const MODE_GROUPS = [
 ];
 
 const ALL_MODES = MODE_GROUPS.flatMap((g) => g.modes);
+const QUERY_HISTORY_KEY = "legacylens_query_history";
+const THEME_KEY = "legacylens_theme";
+const MAX_HISTORY = 10;
 
 // ── Types ──
 
@@ -256,21 +259,60 @@ function Sidebar({
 // ── Chunk Display ──
 
 function CodeBlock({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
   return (
-    <pre
-      className="overflow-x-auto text-xs leading-relaxed font-mono whitespace-pre-wrap p-3"
-      style={{ color: "var(--amber)", background: "var(--bg-deep)" }}
-    >
-      {text}
-    </pre>
+    <div className="relative group">
+      <button
+        onClick={copy}
+        className="absolute top-2 right-2 text-xs font-mono px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-green-bright)", color: "var(--accent-green)", borderRadius: 2 }}
+        title="Copy"
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
+      <pre
+        className="overflow-x-auto text-xs leading-relaxed font-mono whitespace-pre-wrap p-3 pr-16"
+        style={{ color: "var(--amber)", background: "var(--bg-deep)" }}
+      >
+        {text}
+      </pre>
+    </div>
   );
 }
 
-function ChunkCard({ chunk, index }: { chunk: RetrievedChunk; index: number }) {
+function ChunkCard({ chunk, index, maxScore }: { chunk: RetrievedChunk; index: number; maxScore: number }) {
   const [expanded, setExpanded] = useState(false);
+  const [explainLoading, setExplainLoading] = useState(false);
+  const [explainText, setExplainText] = useState<string | null>(null);
   const relevance = Math.round(chunk.score * 100);
   const relColor =
     relevance >= 80 ? "var(--accent-green)" : relevance >= 60 ? "var(--amber)" : "#f87171";
+  const barPct = maxScore > 0 ? Math.min(100, (chunk.score / maxScore) * 100) : relevance;
+
+  const onExplain = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (explainLoading || explainText) return;
+    setExplainLoading(true);
+    try {
+      const res = await fetch("/api/explain-chunk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: chunk.text }),
+      });
+      const data = await res.json();
+      setExplainText(data.explanation ?? data.error ?? "Could not explain.");
+    } catch {
+      setExplainText("Request failed.");
+    } finally {
+      setExplainLoading(false);
+    }
+  };
 
   return (
     <div className="overflow-hidden" style={{ border: "1px solid var(--border-green)", borderRadius: 2, background: "var(--bg-surface)" }}>
@@ -297,8 +339,32 @@ function ChunkCard({ chunk, index }: { chunk: RetrievedChunk; index: number }) {
           {relevance}%
         </span>
       </button>
+      <div className="px-2 pb-1.5">
+        <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--bg-deep)" }}>
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${barPct}%`, background: relColor }}
+          />
+        </div>
+      </div>
       {expanded && (
         <div style={{ borderTop: "1px solid var(--border-green)" }}>
+          <div className="flex items-center justify-between px-2 py-1" style={{ background: "var(--bg-panel)", borderBottom: "1px solid var(--border-green)" }}>
+            <span style={{ fontSize: 10, color: "var(--text-muted)" }}>Relevance: {relevance}%</span>
+            <button
+              onClick={onExplain}
+              disabled={explainLoading}
+              className="text-xs font-mono px-2 py-1 transition-colors"
+              style={{ color: "var(--accent-green)", border: "1px solid var(--border-green-bright)", borderRadius: 2, background: "var(--bg-surface)" }}
+            >
+              {explainLoading ? "..." : explainText ? "Explained" : "Explain"}
+            </button>
+          </div>
+          {explainText && (
+            <p className="text-xs px-3 py-2" style={{ color: "var(--text-green-dim)", background: "var(--bg-deep)", borderBottom: "1px solid var(--border-green)" }}>
+              &gt; {explainText}
+            </p>
+          )}
           <CodeBlock text={chunk.text} />
         </div>
       )}
@@ -311,6 +377,7 @@ function CollapsedChunks({ chunks }: { chunks: RetrievedChunk[] }) {
   const topChunk = chunks[0];
   const topSource = topChunk.source.split("\\").pop() ?? topChunk.source;
   const topScore = Math.round(topChunk.score * 100);
+  const maxScore = Math.max(...chunks.map((c) => c.score), 0.01);
 
   return (
     <details className="group mt-3">
@@ -332,7 +399,7 @@ function CollapsedChunks({ chunks }: { chunks: RetrievedChunk[] }) {
       </summary>
       <div className="space-y-1 mt-2">
         {chunks.map((chunk, i) => (
-          <ChunkCard key={chunk.id} chunk={chunk} index={i} />
+          <ChunkCard key={chunk.id} chunk={chunk} index={i} maxScore={maxScore} />
         ))}
       </div>
     </details>
@@ -387,6 +454,7 @@ function SideBySideView({ message }: { message: Message }) {
 // ── Markdown Code Highlight ──
 
 function MarkdownCode({ className, children, ...props }: React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }) {
+  const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || "");
   const lang = match ? match[1] : "";
   const code = String(children).replace(/\n$/, "");
@@ -399,6 +467,13 @@ function MarkdownCode({ className, children, ...props }: React.HTMLAttributes<HT
     );
   }
 
+  const copy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
   loadPrismLang(lang);
   let html = "";
   const grammar = Prism.languages[lang];
@@ -407,13 +482,23 @@ function MarkdownCode({ className, children, ...props }: React.HTMLAttributes<HT
   }
 
   return (
-    <pre className="overflow-x-auto text-xs leading-relaxed font-mono p-3 my-2" style={{ background: "var(--bg-deep)", borderRadius: 2, border: "1px solid var(--border-green)" }}>
-      {html ? (
-        <code className={className} dangerouslySetInnerHTML={{ __html: html }} />
-      ) : (
-        <code className={className}>{code}</code>
-      )}
-    </pre>
+    <div className="relative group my-2">
+      <button
+        onClick={copy}
+        className="absolute top-2 right-2 text-xs font-mono px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity z-[1]"
+        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-green-bright)", color: "var(--accent-green)", borderRadius: 2 }}
+        title="Copy"
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
+      <pre className="overflow-x-auto text-xs leading-relaxed font-mono p-3 pr-16" style={{ background: "var(--bg-deep)", borderRadius: 2, border: "1px solid var(--border-green)" }}>
+        {html ? (
+          <code className={className} dangerouslySetInnerHTML={{ __html: html }} />
+        ) : (
+          <code className={className}>{code}</code>
+        )}
+      </pre>
+    </div>
   );
 }
 
@@ -452,9 +537,18 @@ function AssistantMessage({ message }: { message: Message }) {
           style={{ background: "var(--bg-panel)", border: "1px solid var(--border-green)", borderRadius: 2, padding: "1em 1.2em" }}
         >
           {message.content ? (
-            <ReactMarkdown components={markdownComponents}>{message.content}</ReactMarkdown>
+            <>
+              <ReactMarkdown components={markdownComponents}>{message.content}</ReactMarkdown>
+              {message.isStreaming && <span className="terminal-cursor" />}
+            </>
+          ) : message.isStreaming ? (
+            <div className="space-y-2 animate-pulse">
+              <div className="h-3 rounded" style={{ background: "var(--border-green)", width: "95%" }} />
+              <div className="h-3 rounded" style={{ background: "var(--border-green)", width: "80%" }} />
+              <div className="h-3 rounded" style={{ background: "var(--border-green)", width: "70%" }} />
+              <span className="terminal-cursor" />
+            </div>
           ) : null}
-          {message.isStreaming && <span className="terminal-cursor" />}
         </div>
       </div>
       <CollapsedChunks chunks={message.chunks ?? []} />
@@ -689,18 +783,19 @@ function CallGraphViewer() {
                 const midY = (y1 + y2) / 2;
                 const dimmed = hoveredNode && edge.from !== hoveredNode && edge.to !== hoveredNode;
                 return (
-                  <path
-                    key={i}
-                    d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
-                    stroke={EDGE_COLORS[edge.type] ?? "#333"}
-                    strokeWidth={dimmed ? 1 : 2}
-                    fill="none"
-                    opacity={dimmed ? 0.15 : 0.8}
-                    markerEnd={`url(#arrow-${edge.type})`}
-                  />
+                  <g key={i} className="callgraph-animate-edge" style={{ animationDelay: `${i * 40}ms` }}>
+                    <path
+                      d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
+                      stroke={EDGE_COLORS[edge.type] ?? "#333"}
+                      strokeWidth={dimmed ? 1 : 2}
+                      fill="none"
+                      opacity={dimmed ? 0.15 : 0.8}
+                      markerEnd={`url(#arrow-${edge.type})`}
+                    />
+                  </g>
                 );
               })}
-              {layoutNodes.map((node) => {
+              {layoutNodes.map((node, nodeIdx) => {
                 const isHovered = hoveredNode === node.id;
                 const isConnected = connectedToHovered.has(node.id);
                 const dimmed = hoveredNode && !isHovered && !isConnected;
@@ -710,9 +805,10 @@ function CallGraphViewer() {
                     transform={`translate(${node.x - NODE_W / 2}, ${node.y})`}
                     onMouseEnter={() => setHoveredNode(node.id)}
                     onMouseLeave={() => setHoveredNode(null)}
-                    style={{ cursor: "pointer" }}
-                    opacity={dimmed ? 0.25 : 1}
+                    style={{ cursor: "pointer", animationDelay: `${graphData.edges.length * 40 + nodeIdx * 50}ms` }}
+                    className="callgraph-animate-node"
                   >
+                    <g style={{ opacity: dimmed ? 0.25 : 1 }}>
                     <rect
                       width={NODE_W}
                       height={NODE_H}
@@ -732,6 +828,7 @@ function CallGraphViewer() {
                     >
                       {node.label.length > 22 ? node.label.slice(0, 20) + "\u2026" : node.label}
                     </text>
+                    </g>
                   </g>
                 );
               })}
@@ -796,42 +893,69 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<"chat" | "callgraph">("chat");
   const [sidebarTooltip, setSidebarTooltip] = useState<TooltipInfo | null>(null);
+  const [queryHistory, setQueryHistory] = useState<string[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(QUERY_HISTORY_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        if (Array.isArray(parsed)) setQueryHistory(parsed.slice(0, MAX_HISTORY));
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(THEME_KEY) as "dark" | "light" | null;
+      if (saved === "dark" || saved === "light") setTheme(saved);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {}
+  }, [theme]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || loading) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input.trim(),
-      mode,
+  useEffect(() => {
+    if (!historyOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(e.target as Node)) {
+        setHistoryOpen(false);
+      }
     };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [historyOpen]);
 
-    const assistantId = (Date.now() + 1).toString();
-    const assistantMessage: Message = {
-      id: assistantId,
-      role: "assistant",
-      content: "",
-      mode,
-      chunks: [],
-      isStreaming: true,
-    };
+  const pushHistory = (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    setQueryHistory((prev) => {
+      const next = [trimmed, ...prev.filter((x) => x !== trimmed)].slice(0, MAX_HISTORY);
+      try {
+        localStorage.setItem(QUERY_HISTORY_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
-    setInput("");
-    setLoading(true);
-
+  const runQuery = async (query: string, assistantId: string) => {
     try {
       const response = await fetch("/api/query", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: input.trim(), mode }),
+        body: JSON.stringify({ query, mode }),
       });
 
       if (!response.ok) {
@@ -903,6 +1027,56 @@ export default function Home() {
     }
   };
 
+  const pickHistory = (q: string, submit = false) => {
+    setHistoryOpen(false);
+    if (submit && !loading) {
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: "user",
+        content: q,
+        mode,
+      };
+      const assistantId = (Date.now() + 1).toString();
+      setMessages((prev) => [...prev, userMessage, {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        mode,
+        chunks: [],
+        isStreaming: true,
+      }]);
+      setLoading(true);
+      runQuery(q, assistantId);
+    } else {
+      setInput(q);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = input.trim();
+    if (!q || loading) return;
+    pushHistory(q);
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: q,
+      mode,
+    };
+    const assistantId = (Date.now() + 1).toString();
+    setMessages((prev) => [...prev, userMessage, {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      mode,
+      chunks: [],
+      isStreaming: true,
+    }]);
+    setInput("");
+    setLoading(true);
+    runQuery(q, assistantId);
+  };
+
   const selectedMode = ALL_MODES.find((m) => m.value === mode)!;
 
   return (
@@ -914,8 +1088,8 @@ export default function Home() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <header
-          className="flex-shrink-0 flex items-center justify-between px-5 py-3"
-          style={{ borderBottom: "1px solid var(--border-green)" }}
+          className="flex-shrink-0 flex items-center justify-between px-5 py-3 sticky top-0 z-10"
+          style={{ borderBottom: "1px solid var(--border-green)", background: "var(--bg-deep)" }}
         >
           <div>
             <h1 className="text-base font-bold crt-glow tracking-tight" style={{ color: "var(--accent-green)" }}>
@@ -925,7 +1099,22 @@ export default function Home() {
               {view === "callgraph" ? "call graph visualization" : `mode: ${selectedMode.label.toLowerCase()}`}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              className="text-xs font-mono px-2 py-1 transition-colors hover:opacity-80"
+              style={{
+                background: "var(--bg-surface)",
+                border: "1px solid var(--border-green)",
+                borderRadius: 2,
+                color: "var(--text-green-dim)",
+              }}
+              title={theme === "dark" ? "Switch to light" : "Switch to dark"}
+            >
+              <span className="tracking-wide">
+                {theme === "dark" ? "░ Light" : "█ Dark"}
+              </span>
+            </button>
             <div
               className="w-2 h-2 rounded-full animate-pulse"
               style={{ background: "var(--accent-green)" }}
@@ -988,7 +1177,7 @@ export default function Home() {
                   <div
                     className="flex items-start gap-2 text-sm font-mono px-4 py-2.5"
                     style={{
-                      background: "#0d1f0d",
+                      background: "var(--bg-panel)",
                       borderLeft: "3px solid var(--accent-green)",
                       borderRadius: 2,
                     }}
@@ -1013,28 +1202,87 @@ export default function Home() {
         {view === "chat" && (
           <footer className="flex-shrink-0 px-5 py-3" style={{ borderTop: "1px solid var(--border-green)" }}>
             <form onSubmit={handleSubmit} className="flex gap-3">
-              <div
-                className="flex-1 flex items-center gap-2"
-                style={{
-                  background: "var(--bg-surface)",
-                  border: "1px solid var(--border-green)",
-                  borderRadius: 2,
-                  padding: "0 12px",
-                }}
-              >
-                <span className="crt-glow shrink-0" style={{ color: "var(--accent-green)", fontSize: 14, fontWeight: 700 }}>
-                  &gt;_
-                </span>
-                <input
+              <div className="flex-1 relative" ref={historyRef}>
+                <div
+                  className="flex items-center gap-2"
+                  style={{
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border-green)",
+                    borderRadius: 2,
+                    padding: "0 12px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setHistoryOpen((o) => !o)}
+                    className="shrink-0 text-xs font-mono py-2.5"
+                    style={{ color: "var(--text-green-dim)" }}
+                    title="Query history"
+                  >
+                    [⌃]
+                  </button>
+                  <span className="crt-glow shrink-0" style={{ color: "var(--accent-green)", fontSize: 14, fontWeight: 700 }}>
+                    &gt;_
+                  </span>
+                  <input
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder={`${selectedMode.label.toLowerCase()}...`}
-                  className="flex-1 bg-transparent py-2.5 text-sm focus:outline-none placeholder-opacity-40"
-                  style={{ color: "var(--text-body)", caretColor: "var(--accent-green)" }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && e.ctrlKey) {
+                      e.preventDefault();
+                      if (!loading && input.trim()) {
+                        const form = e.currentTarget.form;
+                        form?.requestSubmit();
+                      }
+                    }
+                  }}
+                  placeholder={`${selectedMode.label.toLowerCase()}... (Ctrl+Enter to send)`}
+                  className="flex-1 py-2.5 text-sm focus:outline-none placeholder-opacity-40"
+                  style={{
+                    color: "var(--text-body)",
+                    background: "var(--bg-surface)",
+                    caretColor: "var(--accent-green)",
+                  }}
                   disabled={loading}
                 />
                 {loading && <span className="terminal-cursor" />}
+                </div>
+                {historyOpen && queryHistory.length > 0 && (
+                  <div
+                    className="absolute bottom-full left-0 right-0 mb-1 overflow-auto max-h-48"
+                    style={{
+                      background: "var(--bg-elevated)",
+                      border: "1px solid var(--border-green-bright)",
+                      borderRadius: 2,
+                      zIndex: 100,
+                    }}
+                  >
+                    <div className="px-2 py-1.5 text-[10px] uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                      Recent queries
+                    </div>
+                    {queryHistory.map((q) => (
+                      <div key={q} className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => pickHistory(q, false)}
+                          className="flex-1 text-left text-xs font-mono px-3 py-2 truncate transition-colors hover:bg-[var(--bg-panel)]"
+                          style={{ color: "var(--text-green-dim)" }}
+                        >
+                          {q}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => pickHistory(q, true)}
+                          className="text-[10px] font-mono px-2 shrink-0"
+                          style={{ color: "var(--accent-green)" }}
+                        >
+                          [Run]
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <button
                 type="submit"

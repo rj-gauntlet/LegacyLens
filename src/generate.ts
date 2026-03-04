@@ -94,6 +94,26 @@ function buildContext(chunks: RetrievedChunk[]): string {
     .join("\n\n");
 }
 
+export async function explainChunk(code: string): Promise<string> {
+  const openai = getOpenAI();
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      {
+        role: "system",
+        content: "You are LegacyLens. Explain the given COBOL code in 1-2 clear sentences. Focus on what it does, not syntax.",
+      },
+      {
+        role: "user",
+        content: `Explain this COBOL code:\n\n${code.slice(0, 2000)}`,
+      },
+    ],
+    temperature: 0.2,
+    stream: false,
+  });
+  return response.choices[0]?.message?.content ?? "Could not generate explanation.";
+}
+
 export async function generateAnswer(
   query: string,
   chunks: RetrievedChunk[],
