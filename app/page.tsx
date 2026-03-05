@@ -635,13 +635,19 @@ function computeGraphLayout(nodes: CallGraphNode[], edges: CallGraphEdge[]): Lay
   }
 
   const result: LayoutNode[] = [];
-  for (const [lvl, group] of byLevel) {
+  const sortedLevels = [...byLevel.entries()].sort((a, b) => a[0] - b[0]);
+  const maxLevel = sortedLevels.length > 0 ? sortedLevels[sortedLevels.length - 1][0] : 0;
+  for (const [lvl, group] of sortedLevels) {
     const totalWidth = group.length * NODE_W + (group.length - 1) * NODE_GAP;
     const startX = -totalWidth / 2 + NODE_W / 2;
+    // Stagger single-node levels horizontally so they don't stack in a vertical column
+    const stagger = group.length === 1 && maxLevel > 0
+      ? ((lvl / maxLevel) - 0.5) * (NODE_W + NODE_GAP) * Math.min(maxLevel, 4)
+      : 0;
     group.forEach((n, i) => {
       result.push({
         ...n,
-        x: startX + i * (NODE_W + NODE_GAP),
+        x: startX + i * (NODE_W + NODE_GAP) + stagger,
         y: lvl * (NODE_H + LEVEL_GAP),
         level: lvl,
       });
@@ -801,14 +807,16 @@ function CallGraphViewer() {
                 const dimmed = hoveredNode && !isHovered && !isConnected;
                 return (
                   <g
-                    key={node.id}
+                    key={`${node.id}-${nodeIdx}`}
                     transform={`translate(${node.x - NODE_W / 2}, ${node.y})`}
                     onMouseEnter={() => setHoveredNode(node.id)}
                     onMouseLeave={() => setHoveredNode(null)}
-                    style={{ cursor: "pointer", animationDelay: `${graphData.edges.length * 40 + nodeIdx * 50}ms` }}
-                    className="callgraph-animate-node"
+                    style={{ cursor: "pointer" }}
                   >
-                    <g style={{ opacity: dimmed ? 0.25 : 1 }}>
+                    <g
+                      style={{ opacity: dimmed ? 0.25 : 1, animationDelay: `${graphData.edges.length * 40 + nodeIdx * 50}ms` }}
+                      className="callgraph-animate-node"
+                    >
                     <rect
                       width={NODE_W}
                       height={NODE_H}
