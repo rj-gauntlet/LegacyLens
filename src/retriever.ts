@@ -91,18 +91,26 @@ export async function retrieveChunks(
 ): Promise<RetrievedChunk[]> {
   const { index, embeddings } = getClients();
 
+  const tEmbedStart = performance.now();
   const [queryVector] = await embeddings.embedDocuments([query]);
+  const embedMs = Math.round(performance.now() - tEmbedStart);
+
   const fileHint = extractFileHint(query);
   const queryTerms = extractQueryTerms(query);
 
   // Always fetch a larger pool for hybrid re-ranking
   const fetchK = Math.max(topK * 3, 30);
 
+  const tQueryStart = performance.now();
   const results = await index.query({
     vector: queryVector,
     topK: fetchK,
     includeMetadata: true,
   });
+  const queryMs = Math.round(performance.now() - tQueryStart);
+  if (process.env.NODE_ENV !== "test") {
+    console.info("[retriever perf]", JSON.stringify({ embed_ms: embedMs, pinecone_ms: queryMs }));
+  }
 
   if (!results.matches) return [];
 
@@ -135,14 +143,22 @@ export async function retrieveCrossFileChunks(
 ): Promise<RetrievedChunk[]> {
   const { index, embeddings } = getClients();
 
+  const tEmbedStart = performance.now();
   const [queryVector] = await embeddings.embedDocuments([query]);
+  const embedMs = Math.round(performance.now() - tEmbedStart);
+
   const queryTerms = extractQueryTerms(query);
 
+  const tQueryStart = performance.now();
   const results = await index.query({
     vector: queryVector,
     topK: Math.max(topK * 5, 50),
     includeMetadata: true,
   });
+  const queryMs = Math.round(performance.now() - tQueryStart);
+  if (process.env.NODE_ENV !== "test") {
+    console.info("[retriever perf cross_ref]", JSON.stringify({ embed_ms: embedMs, pinecone_ms: queryMs }));
+  }
 
   if (!results.matches) return [];
 

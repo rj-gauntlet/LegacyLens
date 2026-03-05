@@ -57,12 +57,19 @@ export async function POST(req: NextRequest) {
 
   const encoder = new TextEncoder();
 
+  const timings: Record<string, number> = {};
+  const tTotalStart = performance.now();
+
   try {
     const searchQuery = buildSearchQuery(query, mode as FeatureMode);
+    const tRetrieveStart = performance.now();
     const chunks =
       mode === "cross_ref"
         ? await retrieveCrossFileChunks(searchQuery, 15)
         : await retrieveChunks(searchQuery, 10);
+    timings.retrieve_ms = Math.round(performance.now() - tRetrieveStart);
+
+    let tFirstToken: number | null = null;
 
     const stream = new ReadableStream({
       async start(controller) {
@@ -71,17 +78,34 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${chunksPayload}\n\n`));
 
         try {
-          // Then stream the LLM answer
+          const tLLMStart = performance.now();
           await generateAnswerStream(
             query,
             chunks,
             mode as FeatureMode,
             (text) => {
+              if (tFirstToken === null) {
+                tFirstToken = performance.now();
+                timings.ttft_ms = Math.round(tFirstToken - tLLMStart);
+              }
               const payload = JSON.stringify({ type: "token", text });
               controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
             },
             () => {
-              const payload = JSON.stringify({ type: "done" });
+              timings.llm_total_ms = Math.round(performance.now() - tLLMStart);
+              timings.total_ms = Math.round(performance.now() - tTotalStart);
+              console.info(
+                "[query perf]",
+                JSON.stringify({
+                  retrieve_ms: timings.retrieve_ms,
+                  ttft_ms: timings.ttft_ms ?? null,
+                  llm_total_ms: timings.llm_total_ms ?? null,
+                  total_ms: timings.total_ms,
+                  mode,
+                  chunks: chunks.length,
+                })
+              );
+              const payload = JSON.stringify({ type: "done", timings });
               controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
               controller.close();
             }

@@ -1112,7 +1112,7 @@ export default function Home() {
               title={theme === "dark" ? "Switch to light" : "Switch to dark"}
             >
               <span className="tracking-wide">
-                {theme === "dark" ? "░ Light" : "█ Dark"}
+                {theme === "dark" ? "█ Light" : "█ Dark"}
               </span>
             </button>
             <div
