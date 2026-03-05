@@ -70,7 +70,15 @@ npm run dev
 ### 7. **Infrastructure**
 - **Vercel region**: Deploy in same region as OpenAI/Pinecone (e.g. us-east-1)
 - **Keep-alive**: Reuse HTTP connections; Node.js fetch/OpenAI client should do this by default
-- **Cold starts**: Consider Vercel Pro for better cold-start behavior; or edge runtime for the embedding step
+- **Cold starts**: Keep-warm cron (see below); Vercel Pro for better cold-start behavior; edge runtime for the embedding step
+
+### 9. **Cold Start Mitigation (Keep-Warm Cron)**
+A cron job hits `/api/warm` every 5 minutes to keep retrieval (embed + Pinecone) warm. This reduces cold-start latency for the first query after idle periods.
+
+**Setup:**
+1. Set `CRON_SECRET` in Vercel Project → Environment Variables (any random string).
+2. Deploy. The cron in `vercel.json` runs automatically on production.
+3. Vercel sends `Authorization: Bearer <CRON_SECRET>` when invoking the cron. If `CRON_SECRET` is not set, the warm endpoint allows unauthenticated calls (for local dev).
 
 ### 8. **Target SLAs**
 - **Retrieve**: < 1s (embed + Pinecone)
