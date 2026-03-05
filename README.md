@@ -39,6 +39,8 @@ PINECONE_INDEX=legacylens
 
 **Important:** Never commit `.env` to version control. It is listed in `.gitignore`.
 
+For Vercel deployment, also set `CRON_SECRET` (any random string) to secure the keep-warm cron. Generate with PowerShell: `[Convert]::ToBase64String((1..32|%{Get-Random -Max 256})-as[byte[]])`
+
 ### 3. Ingest the codebase
 
 Clone the GnuCOBOL Contrib repo into the `codebase` folder, then run ingestion:
@@ -65,7 +67,9 @@ LegacyLens/
 ├── app/                    # Next.js App Router
 │   ├── api/
 │   │   ├── query/          # RAG query endpoint (POST)
-│   │   └── callgraph/      # Call graph data endpoint
+│   │   ├── callgraph/      # Call graph data endpoint
+│   │   ├── explain-chunk/  # Inline chunk explanation (POST)
+│   │   └── warm/           # Keep-warm cron (GET, cold start mitigation)
 │   ├── globals.css         # Global styles
 │   ├── layout.tsx          # Root layout
 │   └── page.tsx            # Main chat UI
@@ -81,9 +85,12 @@ LegacyLens/
 │   ├── history.jsonl       # Summary per run (trend tracking)
 │   └── README.md           # Eval usage docs
 ├── codebase/               # Cloned COBOL repo (gitignored)
+├── docs/
+│   └── PERFORMANCE.md      # Query profiling, cold start, improvement ideas
 ├── Pre-Search-Document.md  # Architecture decisions
 ├── RAG-Architecture-Document.md
 ├── AI-Cost-Analysis.md
+├── vercel.json             # Cron config (keep-warm)
 └── TESTING.md              # Testing strategy and QA checklist
 ```
 
@@ -102,6 +109,7 @@ LegacyLens/
 ## Documentation
 
 - [Pre-Search Document](Pre-Search-Document.md) — Constraints and architecture decisions
+- [Performance & Profiling](docs/PERFORMANCE.md) — Query profiling, cold start mitigation, improvement ideas
 - [RAG Architecture](RAG-Architecture-Document.md) — Vector DB, chunking, retrieval pipeline
 - [AI Cost Analysis](AI-Cost-Analysis.md) — Development and production cost estimates
 - [TESTING.md](TESTING.md) — Testing strategy and QA checklist
